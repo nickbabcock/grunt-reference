@@ -64,15 +64,13 @@ module.exports = function(grunt) {
 
         var files = this.filesSrc;
 
-
-        var processDOM = function(window, options, callback) {
-            var filePath = window.location.pathname;
+        var getCitableReferences = function(window) {
             var $ = window.$;
             var _ = window._;
 
             var referenceElements = $('[cite], cite');
 
-            var requests = _.map(referenceElements, function(val, ind, arr) {
+            return _.map(referenceElements, function(val, ind, arr) {
                 var citation = $.trim(val.getAttribute('cite') || $(val).text());
 
                 var split = citation.split(' ');
@@ -88,6 +86,12 @@ module.exports = function(grunt) {
                     lookup: lookup
                 };
             });
+        };
+
+        var processDOM = function(window, options, callback) {
+            var $ = window.$;
+            var _ = window._;
+            var requests = getCitableReferences(window);
 
             async.each(requests, function(newCitation, lookupComplete) {
                 var lookup = newCitation.lookup;
@@ -159,10 +163,41 @@ module.exports = function(grunt) {
             fs.writeFileSync(window.location.pathname, documentToSource(window.document));
         };
 
+        if (fs.existsSync(path.resolve('./__citeBuffer.js'))) {
+            var contents = fs.readFileSync(path.resolve('./__citeBuffer.js'));
+            contents = JSON.parse(contents);            
+        }
+
         var fileJSON = [];
         async.each(files, function(f, callback) {
             jsdom.env(path.resolve(f), scripts, function(errors, window) {
-                if (!errors){
+                if (!errors && contents) {
+                    var _ = window._;
+                    var requests = getCitableReferences(window);
+                    var doc = _.find(contents, function(val) {
+                        return val.path === window.location.pathname; 
+                    });
+
+                    if (doc !== undefined) {
+                        doc.data.forEach(function(val, ind) {
+                            val.elementIndex = ind;
+                            val.element = requests[ind].element;
+                            if (val.requestResult.publishedDate !== undefined) {
+                                val.requestResult.publishedDate = 
+                                    new Date(Date.parse(val.requestResult.publishedDate));
+                            }
+                            else if (!val.website && !val.periodical && 
+                                val.requestResult.volumeInfo.publishedDate !== undefined) {
+                                val.requestResult.volumeInfo.publishedDate = 
+                                    new Date(Date.parse(val.requestResult.volumeInfo.publishedDate));
+                            }
+                        });
+
+                        domRequestsCompleted(window, doc.data, task.options());                       
+                    }
+                    callback();
+                }   
+                else if (!errors) {
                     processDOM(window, task.options(), function(window, data, options) {
                         if (data.length !== 0) {
                             domRequestsCompleted(window, data, options);
@@ -181,15 +216,17 @@ module.exports = function(grunt) {
                             fileJSON.push(newFile);
                         }
                         callback();
-                    });
-                }           
+                    });                 
+                }       
                 else {
                     grunt.log.writeln('error');
                     callback();
                 }   
             });
         }, function(error) {
-            fs.writeFileSync('./__citeBuffer.js', JSON.stringify(fileJSON, null, '\t'));
+            if (!contents) {
+                fs.writeFileSync('./__citeBuffer.js', JSON.stringify(fileJSON, null, '\t'));
+            }
             done();
         });
     });
