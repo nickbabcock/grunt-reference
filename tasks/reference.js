@@ -5,6 +5,7 @@ module.exports = function(grunt) {
 	var path = require('path');
 	var fs = require('fs');
 	var request = require('request');
+    var async = require('async');
 
 	var scripts = [
 		'//ajax.googleapis.com/ajax/libs/jquery/1.10.0/jquery.min.js',
@@ -72,57 +73,52 @@ module.exports = function(grunt) {
 			var referenceElements = $('[cite], cite');
 
 			var citationsCompleted = 0;
-			var requests = [];
-			_.each(referenceElements, function(val, ind, arr) {
-				var citation = $.trim(val.getAttribute('cite') || $(val).text());
+			var requests = _.map(referenceElements, function(val, ind, arr) {
+                var citation = $.trim(val.getAttribute('cite') || $(val).text());
 
 				var split = citation.split(' ');
 				var lookup = split[0];
 				var pageReference = split[1];
 
-				var lookupComplete = function() {
-					citationsCompleted++;
-					if (citationsCompleted === arr.length) {
-						callback(window, requests, options);
-					}					
-				};
-
-				var newCitation = {
+                return {
 					element: val,
 					elementIndex: ind,
 					page: parseInt(pageReference, 10) || 0,
-				};
+                    periodical: lookup.indexOf('/') !== -1 && lookup.indexOf('http') === -1,
+                    website: lookup.indexOf('http') !== -1,
+                    lookup: lookup
+                };
+            });
 
-				if (lookup.indexOf('http') !== -1) {
-					newCitation.requestResult = { id: lookup, authors: [] };
-					newCitation.website = true;
-					requests.push(newCitation);
-					lookupComplete();
-				}
-				else if (lookup.indexOf('/') !== -1) {
-					var urlP = 'http://api.altmetric.com/v1/doi/' + lookup;
+            async.each(requests, function(newCitation, lookupComplete) {
+                var lookup = newCitation.lookup;
+                if (newCitation.website) {
+                    newCitation.requestResult = { id: lookup };
+                    lookupComplete();
+                }
+                else if (newCitation.periodical) {
+                    var urlP = 'http://api.altmetric.com/v1/doi/' + lookup;
 					request.get(urlP, function(error, response, body) {
 						body = JSON.parse(body);
-						newCitation.periodical = true;
 						newCitation.requestResult = body;
 						newCitation.requestResult.publishedDate = new Date(body.published_on * 1000);
 						newCitation.requestResult.id = newCitation.requestResult.doi;
 						newCitation.requestResult.authors = [];
-						requests.push(newCitation);
 						lookupComplete();
 					});
-				}
-				else {
-					var urlG = 'https://www.googleapis.com/books/v1/volumes?q=isbn:' + lookup;
+                }
+                else {
+                    var urlG = 'https://www.googleapis.com/books/v1/volumes?q=isbn:' + lookup;
 					request.get(urlG, function(error, response, body) {
 						body = JSON.parse(body);
 						newCitation.requestResult = body.items[0];
 						newCitation.requestResult.volumeInfo.publishedDate = new Date(Date.parse(newCitation.requestResult.volumeInfo.publishedDate));
-						requests.push(newCitation);		
 						lookupComplete();
 					});
-				}
-			});
+                }
+            }, function(err) {
+			    callback(window, requests, options);
+            });
 
 			if (referenceElements.length === 0) {
 				callback(window, undefined);
@@ -168,18 +164,8 @@ module.exports = function(grunt) {
 			fs.writeFileSync(window.location.pathname, documentToSource(window.document));
 		};
 
-
-		var filesCompleted = 0;
 		var fileJSON = [];
-		files.forEach(function(f, ind, arr) {
-			var doneAfterAllFilesComplete = function() {
-				filesCompleted++;
-				if (filesCompleted === arr.length) {
-					fs.writeFileSync('./__citeBuffer.js', JSON.stringify(fileJSON, null, '\t'));
-					done();
-				}
-			};
-
+        async.each(files, function(f, callback) {
 			jsdom.env(path.resolve(f), scripts, function(errors, window) {
 				if (!errors){
 					processDOM(window, task.options(), function(window, data, options) {
@@ -199,14 +185,17 @@ module.exports = function(grunt) {
 
 							fileJSON.push(newFile);
 						}
-						doneAfterAllFilesComplete();
+                        callback();
 					});
 				}			
 				else {
 					grunt.log.writeln('error');
-					doneAfterAllFilesComplete();
+                    callback();
 				}	
 			});
-		});
+        }, function(error) {
+			fs.writeFileSync('./__citeBuffer.js', JSON.stringify(fileJSON, null, '\t'));
+            done();
+        });
 	});
 };
