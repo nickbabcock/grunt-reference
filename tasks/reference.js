@@ -151,22 +151,17 @@ module.exports = function(grunt) {
 			var $ = window.$;
 			var _ = window._;
 
-			grunt.log.writeln("A");
 			mapIbids(data);
 
 			var container = $('#' + options.referenceContainer);
 			var elementTemplate = _.template($('#' + options.elementTemplateId).html());
 			var containerTemplate = _.template($('#' + options.referenceTemplateId).html());
 
-			grunt.log.writeln("B");
 			data.forEach(function(val, ind) {
 				$(val.element).after(elementTemplate({ i: ind }));
 			});
 
-			grunt.log.writeln("C");
-			grunt.log.writeln(window.location.pathname);
 			container.html(containerTemplate({ references: data }));
-			grunt.log.writeln("D");
 
 			$('script.jsdom').remove();
 
@@ -186,7 +181,6 @@ module.exports = function(grunt) {
 			};
 
 			jsdom.env(path.resolve(f), scripts, function(errors, window) {
-				grunt.log.writeln(f);
 				if (!errors){
 					processDOM(window, task.options(), function(window, data, options) {
 						if (data !== undefined) {
