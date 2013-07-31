@@ -72,7 +72,6 @@ module.exports = function(grunt) {
 
             var referenceElements = $('[cite], cite');
 
-            var citationsCompleted = 0;
             var requests = _.map(referenceElements, function(val, ind, arr) {
                 var citation = $.trim(val.getAttribute('cite') || $(val).text());
 
@@ -93,7 +92,7 @@ module.exports = function(grunt) {
             async.each(requests, function(newCitation, lookupComplete) {
                 var lookup = newCitation.lookup;
                 if (newCitation.website) {
-                    newCitation.requestResult = { id: lookup };
+                    newCitation.requestResult = { id: lookup, authors: [] };
                     lookupComplete();
                 }
                 else if (newCitation.periodical) {
@@ -119,10 +118,6 @@ module.exports = function(grunt) {
             }, function(err) {
                 callback(window, requests, options);
             });
-
-            if (referenceElements.length === 0) {
-                callback(window, undefined);
-            }
         };
 
         var mapIbids = function(arr) {
@@ -169,7 +164,7 @@ module.exports = function(grunt) {
             jsdom.env(path.resolve(f), scripts, function(errors, window) {
                 if (!errors){
                     processDOM(window, task.options(), function(window, data, options) {
-                        if (data !== undefined) {
+                        if (data.length !== 0) {
                             domRequestsCompleted(window, data, options);
 
                             data.forEach(function(val, ind) {
