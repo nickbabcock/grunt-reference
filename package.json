@@ -4,7 +4,7 @@
   "description": "Generates references based on DOM elements",
   "author": "Nick Babcock",
   "license": "MIT",
-  "main": "lib/reference",
+  "main": "reference",
   "devDependencies": {
     "grunt": "~0.4.1",
     "grunt-contrib-jshint": "~0.6.1",
