@@ -1,0 +1,14 @@
+{
+  "name": "referencejs",
+  "version": "0.0.1",
+  "description": "Generates references based on DOM elements",
+  "author": "Nick Babcock",
+  "license": "MIT",
+  "main": "lib/reference",
+  "devDependencies": {
+    "grunt": "~0.4.1",
+    "grunt-contrib-jshint": "~0.6.1",
+    "jsdom": "~0.8.2",
+    "request": "~2.25.0"
+  }
+}
