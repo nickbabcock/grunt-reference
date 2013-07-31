@@ -137,20 +137,11 @@ module.exports = function(grunt) {
 
         // Finds any equivalencies between the found data
         var mapIbids = function(arr) {
-            var mapOnId = function(element) {
-                return element.requestResult.id;
-            };
 
-            for (var i = arr.length - 1; i >= 0; i--) {
-                var next = arr.map(mapOnId)
-                    .lastIndexOf(arr[i].requestResult.id, i - 1);
-
-                if (next <= 0 && arr[0].requestResult.id !== arr[i].requestResult.id) {
-                    arr[i].ibidDifference = -1;
-                }
-                else {
-                    arr[i].ibidDifference = i - next;
-                }
+            // An ibid occurs whenever the citation immediately prior has the
+            // same id.
+            for (var i = 1; i < arr.length; i++) {
+                arr[i].ibid = arr[i].requestResult.id === arr[i-1].requestResult.id;
             }
         };
 
