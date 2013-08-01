@@ -21,13 +21,15 @@ module.exports = function(grunt) {
 
         var filePath = '/mnt/Windows/nbsoftsolutions/_site/blog/reference-track-sheet.html';
         jsdom.env(filePath, scripts, function(errors, window) {
-
             var $ = window.$;
             var _ = window._;
 
             var contents = fs.readFileSync(path.resolve('./__citeBuffer.js'));
             contents = JSON.parse(contents);
 
+            // Extracts all the books from all the posts and groups them by
+            // their id.  Then creates an object that simplifies properties.
+            // Orders the array such that most cited books are first.
             contents = _.chain(contents)
             .pluck('data')
             .flatten()
@@ -51,6 +53,9 @@ module.exports = function(grunt) {
             var templ = _.template($('#referencePageTmpl').html());
 
             $('div.Product').append($('<div>').html(templ({ references: contents })));
+
+            // jsdom appends script elements that are passed into it with a
+            // script tag of jsdom class. Remove these.
             $('script.jsdom').remove();
 
             fs.writeFileSync(filePath, documentToSource(window.document));
@@ -61,9 +66,12 @@ module.exports = function(grunt) {
     grunt.registerMultiTask('reference', function() {
         var task = this;
         var done = this.async();
-
         var files = this.filesSrc;
 
+        // Finds all the citable elements from a given DOM and maps them to an
+        // intermediate object that houses information about how further
+        // information should be retrieved.  Returns these intermediate
+        // objects.
         var getCitableReferences = function(window) {
             var $ = window.$;
             var _ = window._;
@@ -88,6 +96,9 @@ module.exports = function(grunt) {
             });
         };
 
+        // ayncronously requests data for a citation.  Depending on how the
+        // citation is formatted, the requests will be sent to a different
+        // source.
         var processDOM = function(window, options, callback) {
             var $ = window.$;
             var _ = window._;
@@ -124,6 +135,7 @@ module.exports = function(grunt) {
             });
         };
 
+        // Finds any equivalencies between the found data
         var mapIbids = function(arr) {
             var mapOnId = function(element) {
                 return element.requestResult.id;
@@ -142,6 +154,7 @@ module.exports = function(grunt) {
             }
         };
 
+        // Modify the DOM with the found data and overwrite the old file
         var domRequestsCompleted = function(window, data, options) {
             var $ = window.$;
             var _ = window._;
@@ -152,17 +165,24 @@ module.exports = function(grunt) {
             var elementTemplate = _.template($('#' + options.elementTemplateId).html());
             var containerTemplate = _.template($('#' + options.referenceTemplateId).html());
 
+            // Render the template which is inserted after each citation element
             data.forEach(function(val, ind) {
                 $(val.element).after(elementTemplate({ i: ind }));
             });
 
+            // Render the template which holds all of the page's references
             container.html(containerTemplate({ references: data }));
 
+            // jsdom appends script elements that are passed into it with a
+            // script tag of jsdom class. Remove these.
             $('script.jsdom').remove();
 
             fs.writeFileSync(window.location.pathname, documentToSource(window.document));
         };
 
+        // If we've already aggregated the data into a file, we should re-use
+        // that data instead issuing additional requests.  This also avoids
+        // the problem that google throttles usage above a certain threshold
         if (fs.existsSync(path.resolve('./__citeBuffer.js'))) {
             var contents = fs.readFileSync(path.resolve('./__citeBuffer.js'));
             contents = JSON.parse(contents);            
@@ -171,17 +191,26 @@ module.exports = function(grunt) {
         var fileJSON = [];
         async.each(files, function(f, callback) {
             jsdom.env(path.resolve(f), scripts, function(errors, window) {
+
+                // If we have already calculated the citations for this file
+                // use them instead of sending new requests.
                 if (!errors && contents) {
                     var _ = window._;
+
+                    // Have to re-figure out citable elements because they
+                    // could not be saved due to their cyclical nature
                     var requests = getCitableReferences(window);
                     var doc = _.find(contents, function(val) {
                         return val.path === window.location.pathname; 
                     });
 
+                    // If the page had citations...
                     if (doc !== undefined) {
                         doc.data.forEach(function(val, ind) {
                             val.elementIndex = ind;
                             val.element = requests[ind].element;
+
+                            // JSON dates are a pain to extract
                             if (val.requestResult.publishedDate !== undefined) {
                                 val.requestResult.publishedDate = 
                                     new Date(Date.parse(val.requestResult.publishedDate));
@@ -199,9 +228,13 @@ module.exports = function(grunt) {
                 }   
                 else if (!errors) {
                     processDOM(window, task.options(), function(window, data, options) {
+
+                        // If citable elements were found in the page...
                         if (data.length !== 0) {
                             domRequestsCompleted(window, data, options);
 
+                            // Delete element because of its cyclical nature.
+                            // JSON can't encode DOM elements
                             data.forEach(function(val, ind) {
                                 delete val.element;
                                 delete val.elementIndex;
