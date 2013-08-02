@@ -6,6 +6,8 @@ module.exports = function(grunt) {
     var fs = require('fs');
     var request = require('request');
     var async = require('async');
+    var pluginName = 'referencejs';
+    var cachedRequests = path.resolve('./.grunt/' + pluginName + '/cachedRequests.js');
 
     var scripts = [
         '//ajax.googleapis.com/ajax/libs/jquery/1.10.0/jquery.min.js',
@@ -24,7 +26,7 @@ module.exports = function(grunt) {
             var $ = window.$;
             var _ = window._;
 
-            var contents = fs.readFileSync(path.resolve('./__citeBuffer.js'));
+            var contents = fs.readFileSync(cachedRequests);
             contents = JSON.parse(contents);
 
             // Extracts all the books from all the posts and groups them by
@@ -174,8 +176,8 @@ module.exports = function(grunt) {
         // If we've already aggregated the data into a file, we should re-use
         // that data instead issuing additional requests.  This also avoids
         // the problem that google throttles usage above a certain threshold
-        if (fs.existsSync(path.resolve('./__citeBuffer.js'))) {
-            var contents = fs.readFileSync(path.resolve('./__citeBuffer.js'));
+        if (fs.existsSync(cachedRequests)) {
+            var contents = fs.readFileSync(cachedRequests);
             contents = JSON.parse(contents);            
         }
 
@@ -249,7 +251,7 @@ module.exports = function(grunt) {
             });
         }, function(error) {
             if (!contents) {
-                fs.writeFileSync('./__citeBuffer.js', JSON.stringify(fileJSON, null, '\t'));
+                fs.writeFileSync(cachedRequests, JSON.stringify(fileJSON, null, '\t'));
             }
             done();
         });
