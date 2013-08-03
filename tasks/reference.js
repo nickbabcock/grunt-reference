@@ -18,6 +18,20 @@ module.exports = function(grunt) {
         return document.doctype.toString() + document.innerHTML;
     };
 
+    var parseRequired = function(task, arr) {
+        var options = {};
+        arr.forEach(function(val) {
+            if (task.data[val] === undefined) {
+                grunt.fail.fatal('Must provide ' + val + ' option');
+            }
+            else {
+                options[val] = task.data[val];
+            }
+        });
+
+        return options;
+    };
+
     grunt.registerMultiTask('renderReferencePage', function() {
         var done = this.async();
 
@@ -154,7 +168,7 @@ module.exports = function(grunt) {
 
             mapIbids(data);
 
-            var container = $('#' + options.referenceContainer);
+            var container = $('#' + options.referenceContainerId);
             var elementTemplate = _.template($('#' + options.elementTemplateId).html());
             var containerTemplate = _.template($('#' + options.referenceTemplateId).html());
 
@@ -172,6 +186,9 @@ module.exports = function(grunt) {
 
             fs.writeFileSync(window.location.pathname, documentToSource(window.document));
         };
+
+        var requiredConfig = ['referenceContainerId', 'elementTemplateId', 'referenceTemplateId'];
+        var options = parseRequired(task, requiredConfig);
 
         // If we've already aggregated the data into a file, we should re-use
         // that data instead issuing additional requests.  This also avoids
@@ -215,12 +232,12 @@ module.exports = function(grunt) {
                             }
                         });
 
-                        domRequestsCompleted(window, doc.data, task.options());                       
+                        domRequestsCompleted(window, doc.data, options);                       
                     }
                     callback();
                 }   
                 else if (!errors) {
-                    processDOM(window, task.options(), function(window, data, options) {
+                    processDOM(window, options, function(window, data, options) {
 
                         // If citable elements were found in the page...
                         if (data.length !== 0) {
