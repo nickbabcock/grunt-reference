@@ -35,47 +35,53 @@ module.exports = function(grunt) {
     grunt.registerMultiTask('renderReferencePage', function() {
         var done = this.async();
 
-        var filePath = '/mnt/Windows/nbsoftsolutions/_site/blog/reference-track-sheet.html';
-        jsdom.env(filePath, scripts, function(errors, window) {
-            var $ = window.$;
-            var _ = window._;
+        if (this.data.templateId === undefined) {
+            grunt.fail.fatal('Specify templateId to render');
+        }
+        var templateId = this.data.templateId;
 
-            var contents = fs.readFileSync(cachedRequests);
-            contents = JSON.parse(contents);
+        this.filesSrc.forEach(function(val) {
+            jsdom.env(val, scripts, function(errors, window) {
+                var $ = window.$;
+                var _ = window._;
 
-            // Extracts all the books from all the posts and groups them by
-            // their id.  Then creates an object that simplifies properties.
-            // Orders the array such that most cited books are first.
-            contents = _.chain(contents)
-            .pluck('data')
-            .flatten()
-            .filter(function(val) { return !val.periodical && !val.website; })
-            .groupBy(function(val) { return val.requestResult.id; })
-            .map(function(val) {
-                return {
-                    count: val.length,
-                    title: val[0].requestResult.volumeInfo.title,
-                    authors: val[0].requestResult.volumeInfo.authors,
-                    description: val[0].requestResult.volumeInfo.description,
-                    publishedDate: val[0].requestResult.volumeInfo.publishedDate,
-                    publisher: val[0].requestResult.volumeInfo.publisher,
-                    image: val[0].requestResult.volumeInfo.imageLinks.thumbnail
-                };
-            })
-            .sortBy(function(val) { return val.count; })
-            .value()
-            .reverse();
+                var contents = fs.readFileSync(cachedRequests);
+                contents = JSON.parse(contents);
 
-            var templ = _.template($('#referencePageTmpl').html());
+                // Extracts all the books from all the posts and groups them by
+                // their id.  Then creates an object that simplifies properties.
+                // Orders the array such that most cited books are first.
+                contents = _.chain(contents)
+                .pluck('data')
+                .flatten()
+                .filter(function(val) { return !val.periodical && !val.website; })
+                .groupBy(function(val) { return val.requestResult.id; })
+                .map(function(val) {
+                    return {
+                        count: val.length,
+                        title: val[0].requestResult.volumeInfo.title,
+                        authors: val[0].requestResult.volumeInfo.authors,
+                        description: val[0].requestResult.volumeInfo.description,
+                        publishedDate: val[0].requestResult.volumeInfo.publishedDate,
+                        publisher: val[0].requestResult.volumeInfo.publisher,
+                        image: val[0].requestResult.volumeInfo.imageLinks.thumbnail
+                    };
+                })
+                .sortBy(function(val) { return val.count; })
+                .value()
+                .reverse();
 
-            $('div.Product').append($('<div>').html(templ({ references: contents })));
+                var templ = _.template($('#' + templateId).html());
 
-            // jsdom appends script elements that are passed into it with a
-            // script tag of jsdom class. Remove these.
-            $('script.jsdom').remove();
+                $('div.Product').append($('<div>').html(templ({ references: contents })));
 
-            fs.writeFileSync(filePath, documentToSource(window.document));
-            done();
+                // jsdom appends script elements that are passed into it with a
+                // script tag of jsdom class. Remove these.
+                $('script.jsdom').remove();
+
+                fs.writeFileSync(val, documentToSource(window.document));
+                done();
+            });
         });
     });
 
