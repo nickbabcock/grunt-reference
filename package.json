@@ -1,15 +1,42 @@
 {
-  "name": "referencejs",
-  "version": "0.0.1",
-  "description": "Generates references based on DOM elements",
-  "author": "Nick Babcock",
-  "license": "MIT",
-  "main": "reference",
+  "name": "grunt-reference",
+  "description": "Generates citations based on DOM elements",
+  "version": "0.1.0",
+  "homepage": "https://github.com/nickbabcock/grunt-reference",
+  "author": {
+    "name": "Nick Babcock",
+    "email": "nbabcock19@hotmail.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/nickbabcock/grunt-reference.git"
+  },
+  "bugs": {
+    "url": "https://github.com/nickbabcock/grunt-reference/issues"
+  },
+  "licenses": [
+    {
+      "type": "MIT",
+      "url": "https://github.com/nickbabcock/grunt-reference/blob/master/LICENSE-MIT"
+    }
+  ],
+  "main": "Gruntfile.js",
+  "engines": {
+    "node": ">= 0.8.0"
+  },
+  "scripts": {
+    "test": "grunt test"
+  },
   "devDependencies": {
-    "grunt": "~0.4.1",
-    "grunt-contrib-jshint": "~0.6.1",
-    "jsdom": "~0.8.2",
-    "request": "~2.25.0",
-    "async": "~0.2.9"
-  }
+    "grunt-contrib-jshint": "~0.6.0",
+    "grunt-contrib-clean": "~0.4.0",
+    "grunt-contrib-nodeunit": "~0.2.0",
+    "grunt": "~0.4.1"
+  },
+  "peerDependencies": {
+    "grunt": "~0.4.1"
+  },
+  "keywords": [
+    "gruntplugin"
+  ]
 }
