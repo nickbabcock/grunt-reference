@@ -35,10 +35,8 @@ module.exports = function(grunt) {
     grunt.registerMultiTask('renderReferencePage', function() {
         var done = this.async();
 
-        if (this.data.templateId === undefined) {
-            grunt.fail.fatal('Specify templateId to render');
-        }
-        var templateId = this.data.templateId;
+        var requiredConfig = ['templateId', 'containerSelector'];
+        var options = parseRequired(task, requiredConfig);
 
         this.filesSrc.forEach(function(val) {
             jsdom.env(val, scripts, function(errors, window) {
@@ -71,9 +69,9 @@ module.exports = function(grunt) {
                 .value()
                 .reverse();
 
-                var templ = _.template($('#' + templateId).html());
+                var templ = _.template($('#' + options.templateId).html());
 
-                $('div.Product').append($('<div>').html(templ({ references: contents })));
+                $(options.containerSelector).append($('<div>').html(templ({ references: contents })));
 
                 // jsdom appends script elements that are passed into it with a
                 // script tag of jsdom class. Remove these.

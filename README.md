@@ -57,14 +57,16 @@ The following examples show DOM snippets that are considered valid citations.
 
 # renderReferencePage
 
-If given a HTML page, `renderReferencePage` will aggregate the citations, invoke the
-given underscore template, and insert the result back into the DOM. A list of
-files can be given, but the intended use is for a single file.
+If given a HTML page, `renderReferencePage` will aggregate the citations, invoke
+the given underscore template, and insert the result back into the DOM. A list
+of files can be given, but the intended use is for a single file.
 
 ## Options
 
 - **templateId**: The id of the underscore template in the DOM that renders the
   aggregated citations.
+- **containerSelector**: jQuery selector that identifies the DOM element that 
+  will have the aggregated template appended to it.
 
 [produce an output]: http://www.nbsoftsolutions.com/blog/reference-track-sheet
 [Ibid.]: http://en.wikipedia.org/wiki/Ibid.
