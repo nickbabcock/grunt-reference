@@ -11,7 +11,8 @@ module.exports = function(grunt) {
 
     var scripts = [
         '//ajax.googleapis.com/ajax/libs/jquery/1.10.0/jquery.min.js',
-        '//cdnjs.cloudflare.com/ajax/libs/underscore.js/1.5.1/underscore-min.js'
+        '//cdnjs.cloudflare.com/ajax/libs/underscore.js/1.5.1/underscore-min.js',
+        '//cdnjs.cloudflare.com/ajax/libs/d3/3.2.2/d3.v3.min.js'
     ];
 
     var documentToSource = function(document) {
@@ -36,7 +37,7 @@ module.exports = function(grunt) {
         var done = this.async();
 
         var requiredConfig = ['templateId', 'containerSelector'];
-        var options = parseRequired(task, requiredConfig);
+        var options = parseRequired(this, requiredConfig);
 
         this.filesSrc.forEach(function(val) {
             jsdom.env(val, scripts, function(errors, window) {
