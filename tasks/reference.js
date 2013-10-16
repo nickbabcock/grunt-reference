@@ -6,8 +6,8 @@ module.exports = function(grunt) {
     var fs = require('fs');
     var request = require('request');
     var async = require('async');
-    var pluginName = 'referencejs';
-    var cachedRequests = path.resolve('./.grunt/' + pluginName + '/cachedRequests.js');
+    var pluginName = 'grunt-reference';
+    var cachedRequests = path.resolve('./.grunt/' + pluginName + '/cachedRequests.json');
 
     var scripts = [
         '//ajax.googleapis.com/ajax/libs/jquery/1.10.0/jquery.min.js',
