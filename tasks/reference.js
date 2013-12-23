@@ -6,276 +6,263 @@ module.exports = function(grunt) {
     var fs = require('fs');
     var request = require('request');
     var async = require('async');
-    var pluginName = 'grunt-reference';
-    var cachedRequests = path.resolve('./.grunt/' + pluginName + '/cachedRequests.json');
+    var _ = require('underscore');
+    var reference = require('../lib/reference.js');
+    var googleCache = path.resolve('./.grunt/grunt-reference/google');
+    var periodCache = path.resolve('./.grunt/grunt-reference/period');
 
-    var scripts = [
-        '//ajax.googleapis.com/ajax/libs/jquery/1.10.0/jquery.min.js',
-        '//cdnjs.cloudflare.com/ajax/libs/underscore.js/1.5.1/underscore-min.js',
-        '//cdnjs.cloudflare.com/ajax/libs/d3/3.2.2/d3.v3.min.js'
-    ];
+    var createD3Graph = function(d3, elem, data) {
+        var barHeight = 28;
+        var marginHeight = 53;
+        var tickCount = 5;
 
-    var documentToSource = function(document) {
-        return document.doctype.toString() + document.innerHTML;
-    };
+        var numData = data.map(function(e) { return e.count; } );
 
-    var parseRequired = function(task, arr) {
-        var options = {};
-        arr.forEach(function(val) {
-            if (task.data[val] === undefined) {
-                grunt.fail.fatal('Must provide ' + val + ' option');
-            }
-            else {
-                options[val] = task.data[val];
-            }
-        });
+        var x = d3.scale.linear()
+            .domain([0, d3.max(numData)])
+            .range([0, 400]);
 
-        return options;
+        var chart = d3.select(elem)
+            .append('svg')    
+            .attr('width', 700)
+            .attr('height', barHeight * data.length + marginHeight)
+            .attr('class', 'chart')
+            .append('g')
+            .attr('transform', 'translate(230, 43)');
+
+
+        chart.selectAll('rect')
+            .data(numData)
+            .enter()
+            .append('rect')
+            .attr('y', function(d, i) {return i * barHeight; })
+            .attr('width', x)
+            .attr('height', barHeight);
+
+        //Add bar text
+        chart.selectAll('text')
+            .data(numData)
+            .enter()
+            .append('text')
+            .attr('x', x)
+            .attr('y', function(d, i) { return i * barHeight + (barHeight / 2); })
+            .attr('dx', -3)
+            .attr('dy', '.35em')
+            .attr('class', 'innerText')
+            .text(String);
+
+
+        //Add ticks
+        chart.selectAll('line')
+            .data(x.ticks(tickCount))
+            .enter().append('line')
+            .attr('x1', x)
+            .attr('x2', x)
+            .attr('y1', 0)
+            .attr('y2', barHeight * data.length)
+            .style('stroke', '#ccc');
+
+        //Add tick label
+        chart.selectAll('.rule')
+            .data(x.ticks(tickCount))
+            .enter()
+            .append('text')
+            .attr('class', 'rule')
+            .attr('x', x)
+            .attr('y', 0)
+            .attr('dy', -3)
+            .attr('text-anchor', 'middle')
+            .text(String);
+
+        //Add line to the base the of the chart
+        chart.append('line')
+            .attr('y1', 0)
+            .attr('y2', barHeight * data.length)
+            .style('stroke', '#000');
+
+        //Add bar text
+        chart.selectAll('text')
+            .data(data, function(d) { return d.title; })
+            .enter()
+            .append('text')
+            .attr('x', -12)
+            .attr('y', function(d, i) { return i * barHeight + (barHeight / 2); })
+            .attr('dx', -3)
+            .attr('dy', '.35em')
+            .attr('class', 'bookText')
+            .text(function(d, i) { 
+                if (d.title.length > 22) {
+                    return d.title.substr(0, 22) + '…'
+                }
+                    return d.title; 
+                });
+
+        //bar title
+        chart.append('text')
+            .attr('y', -28)
+            .attr('class', 'charTitle')
+            .text('Citations per Book');
     };
 
     grunt.registerMultiTask('renderReferencePage', function() {
+        var task = this;
         var done = this.async();
 
-        var requiredConfig = ['templateId', 'containerSelector'];
-        var options = parseRequired(this, requiredConfig);
-
-        this.filesSrc.forEach(function(val) {
-            jsdom.env(val, scripts, function(errors, window) {
-                var $ = window.$;
-                var _ = window._;
-
-                var contents = fs.readFileSync(cachedRequests);
-                contents = JSON.parse(contents);
-
-                // Extracts all the books from all the posts and groups them by
-                // their id.  Then creates an object that simplifies properties.
-                // Orders the array such that most cited books are first.
-                contents = _.chain(contents)
-                .pluck('data')
-                .flatten()
-                .filter(function(val) { return !val.periodical && !val.website; })
-                .groupBy(function(val) { return val.requestResult.id; })
-                .map(function(val) {
+        async.map(this.filesSrc, convertToJSDom, function(err, results) {
+            var elements = _.chain(results).map(function(window) {
+                    return reference.getCitableElements(window);
+                }).flatten()
+                .filter(reference.iseISBN)
+                .map(reference.text).map(reference.lookup)
+                .groupBy(function(isbn) { return isbn; })
+                .map(function(list, isbn) {
+                    var fp = path.join(googleCache, isbn + '.json');
+                    var json = JSON.parse(fs.readFileSync(fp, 'utf8')).items[0];
                     return {
-                        count: val.length,
-                        title: val[0].requestResult.volumeInfo.title,
-                        authors: val[0].requestResult.volumeInfo.authors,
-                        description: val[0].requestResult.volumeInfo.description,
-                        publishedDate: val[0].requestResult.volumeInfo.publishedDate,
-                        publisher: val[0].requestResult.volumeInfo.publisher,
-                        image: val[0].requestResult.volumeInfo.imageLinks.thumbnail
-                    };
-                })
-                .sortBy(function(val) { return val.count; })
-                .value()
-                .reverse();
+                        count: list.length,
+                        title: json.volumeInfo.title,
+                        authors: json.volumeInfo.authors,
+                        description: json.volumeInfo.description,
+                        publishedDate: json.volumeInfo.publishedDate,
+                        publisher: json.volumeInfo.publisher,
+                        image: json.volumeInfo.imageLinks.thumbnail
+                    }
+                }).sortBy('title').reverse()
+                .sortBy('count').reverse()
+                .value();
+           
+            jsdom.env(path.resolve(task.data.referencePage),
+                ['//cdnjs.cloudflare.com/ajax/libs/d3/3.3.11/d3.min.js',
+                 '//ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js'],
+                function(err, window) {
+                    var $ = window.$ 
+                    var templ = _.template($("#referencePageTmpl").html());
+                    var placeholder = $('div.Product');
+                    createD3Graph(window.d3, 'div.Product', elements);
+                    placeholder.append($('<div>').html(templ({references: elements })));
+                    $('script.jsdom').remove();
 
-                var templ = _.template($('#' + options.templateId).html());
-
-                $(options.containerSelector).append($('<div>').html(templ({ references: contents })));
-
-                // jsdom appends script elements that are passed into it with a
-                // script tag of jsdom class. Remove these.
-                $('script.jsdom').remove();
-
-                fs.writeFileSync(val, documentToSource(window.document));
-                done();
-            });
+                    fs.writeFileSync(window.location.pathname,
+                        window.document.doctype + window.document.innerHTML);
+                    done();
+                }
+            );
         });
     });
+
+   var convertToJSDom = function(filepath, callback) {
+       jsdom.env({
+           scripts: ['//ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js'],
+           file: path.resolve(filepath),
+           done: callback
+       });
+   };
+
+    var makeRequests = function(url, cachePath, arr, callback) {
+        var func = function(val, callback) {
+            var val = reference.lookup(reference.text(val));
+            var cache = path.join(cachePath, val.replace('/', '-')  + '.json');
+            if (fs.existsSync(cache)) {
+                fs.readFile(cache, function (err, data) {
+                    return callback(null, data);
+                });
+            }
+            else {
+                request(url + val, function(error, response, body) {
+                    fs.writeFileSync(cache, body);
+                    return callback(null, body);
+                });
+            }
+        }
+
+        async.map(arr, func, function(err, results) { callback(null, results); });
+    };
 
     grunt.registerMultiTask('reference', function() {
         var task = this;
         var done = this.async();
-        var files = this.filesSrc;
 
-        // Finds all the citable elements from a given DOM and maps them to an
-        // intermediate object that houses information about how further
-        // information should be retrieved.  Returns these intermediate
-        // objects.
-        var getCitableReferences = function(window) {
-            var $ = window.$;
-            var _ = window._;
+        // Take each of the files and convert them into a DOM object
+        async.map(this.filesSrc, convertToJSDom, function(err, results) {
 
-            var referenceElements = $('[cite], cite');
-
-            return _.map(referenceElements, function(val, ind, arr) {
-                var citation = $.trim(val.getAttribute('cite') || $(val).text());
-
-                var split = citation.split(' ');
-                var lookup = split[0];
-                var pageReference = split[1];
-
-                return {
-                    element: val,
-                    elementIndex: ind,
-                    page: parseInt(pageReference, 10) || 0,
-                    periodical: lookup.indexOf('/') !== -1 && lookup.indexOf('http') === -1,
-                    website: lookup.indexOf('http') !== -1,
-                    lookup: lookup
-                };
-            });
-        };
-
-        // ayncronously requests data for a citation.  Depending on how the
-        // citation is formatted, the requests will be sent to a different
-        // source.
-        var processDOM = function(window, options, callback) {
-            var $ = window.$;
-            var _ = window._;
-            var requests = getCitableReferences(window);
-
-            async.each(requests, function(newCitation, lookupComplete) {
-                var lookup = newCitation.lookup;
-                if (newCitation.website) {
-                    newCitation.requestResult = { id: lookup, authors: [] };
-                    lookupComplete();
-                }
-                else if (newCitation.periodical) {
-                    var urlP = 'http://api.altmetric.com/v1/doi/' + lookup;
-                    request.get(urlP, function(error, response, body) {
-                        body = JSON.parse(body);
-                        newCitation.requestResult = body;
-                        newCitation.requestResult.publishedDate = new Date(body.published_on * 1000);
-                        newCitation.requestResult.id = newCitation.requestResult.doi;
-                        newCitation.requestResult.authors = [];
-                        lookupComplete();
-                    });
-                }
-                else {
-                    var urlG = 'https://www.googleapis.com/books/v1/volumes?q=isbn:' + lookup;
-                    request.get(urlG, function(error, response, body) {
-                        body = JSON.parse(body);
-                        newCitation.requestResult = body.items[0];
-                        newCitation.requestResult.volumeInfo.publishedDate = new Date(Date.parse(newCitation.requestResult.volumeInfo.publishedDate));
-                        lookupComplete();
-                    });
-                }
-            }, function(err) {
-                callback(window, requests, options);
-            });
-        };
-
-        // Finds any equivalencies between the found data
-        var mapIbids = function(arr) {
-
-            // An ibid occurs whenever the citation immediately prior has the
-            // same id.
-            for (var i = 1; i < arr.length; i++) {
-                arr[i].ibid = arr[i].requestResult.id === arr[i-1].requestResult.id;
-            }
-        };
-
-        // Modify the DOM with the found data and overwrite the old file
-        var domRequestsCompleted = function(window, data, options) {
-            var $ = window.$;
-            var _ = window._;
-
-            mapIbids(data);
-
-            var container = $('#' + options.referenceContainerId);
-            var elementTemplate = _.template($('#' + options.elementTemplateId).html());
-            var containerTemplate = _.template($('#' + options.referenceTemplateId).html());
-
-            // Render the template which is inserted after each citation element
-            data.forEach(function(val, ind) {
-                $(val.element).after(elementTemplate({ i: ind }));
-            });
-
-            // Render the template which holds all of the page's references
-            container.html(containerTemplate({ references: data }));
-
-            // jsdom appends script elements that are passed into it with a
-            // script tag of jsdom class. Remove these.
-            $('script.jsdom').remove();
-
-            fs.writeFileSync(window.location.pathname, documentToSource(window.document));
-        };
-
-        var requiredConfig = ['referenceContainerId', 'elementTemplateId', 'referenceTemplateId'];
-        var options = parseRequired(task, requiredConfig);
-
-        // If we've already aggregated the data into a file, we should re-use
-        // that data instead issuing additional requests.  This also avoids
-        // the problem that google throttles usage above a certain threshold
-        if (fs.existsSync(cachedRequests)) {
-            var contents = fs.readFileSync(cachedRequests);
-            contents = JSON.parse(contents);            
-        }
-
-        var fileJSON = [];
-        async.each(files, function(f, callback) {
-            jsdom.env(path.resolve(f), scripts, function(errors, window) {
-
-                // If we have already calculated the citations for this file
-                // use them instead of sending new requests.
-                if (!errors && contents) {
-                    var _ = window._;
-
-                    // Have to re-figure out citable elements because they
-                    // could not be saved due to their cyclical nature
-                    var requests = getCitableReferences(window);
-                    var doc = _.find(contents, function(val) {
-                        return val.path === window.location.pathname; 
-                    });
-
-                    // If the page had citations...
-                    if (doc !== undefined) {
-                        doc.data.forEach(function(val, ind) {
-                            val.elementIndex = ind;
-                            val.element = requests[ind].element;
-
-                            // JSON dates are a pain to extract
-                            if (val.requestResult.publishedDate !== undefined) {
-                                val.requestResult.publishedDate = 
-                                    new Date(Date.parse(val.requestResult.publishedDate));
-                            }
-                            else if (!val.website && !val.periodical && 
-                                val.requestResult.volumeInfo.publishedDate !== undefined) {
-                                val.requestResult.volumeInfo.publishedDate = 
-                                    new Date(Date.parse(val.requestResult.volumeInfo.publishedDate));
-                            }
+            // Take each of the DOM objects and create citations
+            async.each(results, function(window, callback) {
+                var elements = reference.getCitableElements(window);
+                async.parallel([
+                    function(callback) {
+                        var periodicals = elements.filter(reference.isePeriodical);
+                        var url = 'http://api.altmetric.com/v1/doi/'; 
+                        makeRequests(url, periodCache, periodicals, callback);
+                    },
+                    function(callback) {
+                        var google = elements.filter(reference.iseISBN);
+                        var url = 'https://www.googleapis.com/books/v1/volumes?q=isbn:';
+                        makeRequests(url, googleCache, google, callback);
+                    },
+                    function(callback) {
+                        var urls = elements.filter(reference.iseUrl);
+                        urls = urls.map(function(val) {
+                            return reference.text(val);
                         });
-
-                        domRequestsCompleted(window, doc.data, options);                       
+                        
+                        callback(null, urls);
                     }
-                    callback();
-                }   
-                else if (!errors) {
-                    processDOM(window, options, function(window, data, options) {
+                ], function(err, results) {
+                    var parseJson = function(val) { return JSON.parse(val); };
+                    results[0] = results[0].map(function(val) {
+                        return reference.parsePeriodical(parseJson(val));
+                    });
 
-                        // If citable elements were found in the page...
-                        if (data.length !== 0) {
-                            domRequestsCompleted(window, data, options);
+                    results[1] = results[1].map(function(val) {
+                        return reference.parseGoogle(parseJson(val));
+                    });
+                    
+                    results = _.flatten(results);
+                    results = _.zip(results,
+                        elements.filter(reference.isePeriodical).concat(
+                            elements.filter(reference.iseISBN)).concat(
+                            elements.filter(reference.iseUrl)));
 
-                            // Delete element because of its cyclical nature.
-                            // JSON can't encode DOM elements
-                            data.forEach(function(val, ind) {
-                                delete val.element;
-                                delete val.elementIndex;
-                            });
+                    results.sort(function(a, b) {
+                        // 2 -> DOCUMENT_POSITION_PRECEDING
+                        return a[1][0].compareDocumentPosition(b[1][0]) & 2;
+                    });
+                    
+                    var $ = window.$;
+                    var container = $('#references');
+                    var elementTemplate = _.template($('#supTmpl').html());
+                    var containerTemplate = _.template($('#referenceTmpl').html());
+                    results.forEach(function(val, index) {
+                        $(val[1]).after(elementTemplate({i: index}));
+                    });
 
-                            var newFile = {
-                                title: window.document.title,
-                                path: window.location.pathname,
-                                data: data
-                            };
+                    var ibids = reference.getIbids(results.map(function(val) {
+                        return reference.lookup(reference.text(val[1]));
+                    }));
 
-                            fileJSON.push(newFile);
-                        }
-                        callback();
-                    });                 
-                }       
-                else {
-                    grunt.log.writeln('error');
-                    callback();
-                }   
-            });
-        }, function(error) {
-            if (!contents) {
-                fs.writeFileSync(cachedRequests, JSON.stringify(fileJSON, null, '\t'));
-            }
-            done();
+                    var refs = results.map(function(val, index) {
+                        return {
+                            val: val[0],
+                            ibid: ibids[index],
+                            page: reference.pageNumber(reference.text(val[1])),
+                            isWebsite: reference.iseUrl(val[1]),
+                            isPeriodical: reference.isePeriodical(val[1])
+                        };
+                    });
+
+                    if (results.length > 0) {
+                        container.html(containerTemplate({ references: refs }));
+                    }
+
+                    $('script.jsdom').remove();
+
+                    fs.writeFileSync(window.location.pathname,
+                        window.document.doctype + window.document.innerHTML);
+                    grunt.log.writeln(window.location.pathname);
+
+                    callback(null);
+                });
+            }, function(err) { done(); });
         });
     });
 };

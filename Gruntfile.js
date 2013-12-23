@@ -17,10 +17,14 @@ module.exports = function(grunt) {
                 eqnull: true,
                 node: true
             }       
+        },
+        nodeunit: {
+            all: ['tests/reference_tests.js']
         }
     });
 
     grunt.loadNpmTasks('grunt-contrib-jshint');
+    grunt.loadNpmTasks('grunt-contrib-nodeunit');
 
     grunt.registerTask('default', ['jshint']);
 };
