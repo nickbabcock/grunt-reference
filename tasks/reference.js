@@ -108,6 +108,10 @@ module.exports = function(grunt) {
         var task = this;
         var done = this.async();
 
+        // Read all the html rendered pages and sniff out just the ISBN
+        // numbers. Group all the ISBN numbers and then read their
+        // corresponding cached page. Finally render the reference page with
+        // the resulting data.
         async.map(this.filesSrc, convertToJSDom, function(err, results) {
             var elements = _.chain(results).map(function(window) {
                     return reference.getCitableElements(window);
