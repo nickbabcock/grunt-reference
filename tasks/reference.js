@@ -10,6 +10,8 @@ module.exports = function(grunt) {
     var reference = require('../lib/reference.js');
     var googleCache = path.resolve('./.grunt/grunt-reference/google');
     var periodCache = path.resolve('./.grunt/grunt-reference/period');
+    var jquery = fs.readFileSync(path.resolve(path.join(__dirname, '../vendor/jquery.min.js')), 'utf8');
+    var d3 = fs.readFileSync(path.resolve(path.join(__dirname, '../vendor/d3.min.js')), 'utf8');
 
     var createD3Graph = function(d3, elem, data) {
         var barHeight = 28;
@@ -135,10 +137,10 @@ module.exports = function(grunt) {
                 .sortBy('count').reverse()
                 .value();
            
-            jsdom.env(path.resolve(task.data.referencePage),
-                ['//cdnjs.cloudflare.com/ajax/libs/d3/3.3.11/d3.min.js',
-                 '//ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js'],
-                function(err, window) {
+            jsdom.env({
+                file: path.resolve(task.data.referencePage),
+                src: [jquery, d3],
+                done: function(err, window) {
                     var $ = window.$;
                     var templ = _.template($("#referencePageTmpl").html());
                     var placeholder = $('div.Product');
@@ -150,13 +152,13 @@ module.exports = function(grunt) {
                         window.document.doctype + window.document.innerHTML);
                     done();
                 }
-            );
+            });
         });
     });
 
    var convertToJSDom = function(filepath, callback) {
        jsdom.env({
-           scripts: ['//ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js'],
+           src: [jquery],
            file: path.resolve(filepath),
            done: callback
        });

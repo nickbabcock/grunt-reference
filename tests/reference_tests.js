@@ -1,10 +1,12 @@
 var reference = require('../lib/reference.js');
 var fs = require('fs');
+var path = require('path');
 var jsdom = require('jsdom');
 var _ = require('underscore');
+var jquery = fs.readFileSync(path.resolve('vendor/jquery.min.js'), 'utf8');
 var html = function(html, callback) {
     jsdom.env({
-        scripts: ['//ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js'],
+        src: [jquery],
         html: html,
         done: callback
     });
