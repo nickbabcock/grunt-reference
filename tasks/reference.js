@@ -156,13 +156,13 @@ module.exports = function(grunt) {
         });
     });
 
-   var convertToJSDom = function(filepath, callback) {
-       jsdom.env({
-           src: [jquery],
-           file: path.resolve(filepath),
-           done: callback
-       });
-   };
+    var convertToJSDom = function(filepath, callback) {
+        jsdom.env({
+            src: [jquery],
+            file: path.resolve(filepath),
+            done: callback
+        });
+    };
 
     var makeRequests = function(url, cachePath, arr, callback) {
         var func = function(val, callback) {
