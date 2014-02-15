@@ -106,18 +106,33 @@ module.exports = function(grunt) {
     };
 
     grunt.registerMultiTask('renderReferencePage', function() {
-        var jquery = fs.readFileSync(path.resolve(path.join(__dirname, '../vendor/jquery.min.js')), 'utf8');
-        var d3 = fs.readFileSync(path.resolve(path.join(__dirname, '../vendor/d3.min.js')), 'utf8');
         var task = this;
         var done = this.async();
+        var jqueryPath = path.resolve(path.join(__dirname, '../vendor/jquery.min.js'));
+        var d3Path = path.resolve(path.join(__dirname, '../vendor/d3.min.js'));
+        var src = this.filesSrc;
 
         // Read all the html rendered pages and sniff out just the ISBN
         // numbers. Group all the ISBN numbers and then read their
         // corresponding cached page. Finally render the reference page with
         // the resulting data.
-        async.map(this.filesSrc, function(val, cb) {
-            fs.readFile(val, 'utf8', cb);
-        }, function(err, results) {
+        async.parallel([
+            fs.readFile.bind(fs, jqueryPath, 'utf8'),
+            fs.readFile.bind(fs, d3Path, 'utf8'),
+            function(cb) {
+                async.map(src, function(val, cb2) {
+                    fs.readFile(val, 'utf8', cb2);
+                }, cb);
+            }
+        ], function(err, results) {
+            if (err) {
+                grunt.fail.fatal(err);
+            }
+            
+            var jquery = results[0];
+            var d3 = results[1];
+            results = results[2];
+
             var elements = _.chain(results).map(function(str) {
                     return reference.getCitableElements(cheerio.load(str));
                 }).flatten()
