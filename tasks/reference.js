@@ -1,17 +1,16 @@
 module.exports = function(grunt) {
     'use strict';
 
-    var jsdom = require('jsdom');
     var path = require('path');
     var fs = require('fs');
     var request = require('request');
     var async = require('async');
     var _ = require('underscore');
     var reference = require('../lib/reference.js');
+    var cheerio = require('cheerio');
     var googleCache = path.resolve('./.grunt/grunt-reference/google');
     var periodCache = path.resolve('./.grunt/grunt-reference/period');
-    var jquery = fs.readFileSync(path.resolve(path.join(__dirname, '../vendor/jquery.min.js')), 'utf8');
-    var d3 = fs.readFileSync(path.resolve(path.join(__dirname, '../vendor/d3.min.js')), 'utf8');
+    var jsdom = require('jsdom');
 
     var createD3Graph = function(d3, elem, data) {
         var barHeight = 28;
@@ -107,6 +106,8 @@ module.exports = function(grunt) {
     };
 
     grunt.registerMultiTask('renderReferencePage', function() {
+        var jquery = fs.readFileSync(path.resolve(path.join(__dirname, '../vendor/jquery.min.js')), 'utf8');
+        var d3 = fs.readFileSync(path.resolve(path.join(__dirname, '../vendor/d3.min.js')), 'utf8');
         var task = this;
         var done = this.async();
 
@@ -114,16 +115,36 @@ module.exports = function(grunt) {
         // numbers. Group all the ISBN numbers and then read their
         // corresponding cached page. Finally render the reference page with
         // the resulting data.
-        async.map(this.filesSrc, convertToJSDom, function(err, results) {
-            var elements = _.chain(results).map(function(window) {
-                    return reference.getCitableElements(window);
+        async.map(this.filesSrc, function(val, cb) {
+            fs.readFile(val, 'utf8', cb);
+        }, function(err, results) {
+            var elements = _.chain(results).map(function(str) {
+                    return reference.getCitableElements(cheerio.load(str));
                 }).flatten()
                 .filter(reference.iseISBN)
                 .map(reference.text).map(reference.lookup)
                 .groupBy(function(isbn) { return isbn; })
-                .map(function(list, isbn) {
-                    var fp = path.join(googleCache, isbn + '.json');
-                    var json = JSON.parse(fs.readFileSync(fp, 'utf8')).items[0];
+                .value();
+
+            var outputPath = path.resolve(task.data.referencePage);
+            async.parallel([
+                function(cb) {
+                    jsdom.env({
+                        file: outputPath,
+                        src: [jquery, d3],
+                        done: cb
+                    });
+                },
+                async.map.bind(async, _.keys(elements).map(function(isbn) {
+                    return path.join(googleCache, isbn + '.json'); 
+                }), function(val, cb) { fs.readFile(val, 'utf8', cb); })
+            ], function(err, results) {
+                var window = results[0];
+                var contents = results[1];
+                var keys = _.keys(elements);
+                elements = _.chain(elements).map(function(list, isbn) {
+                    var content = contents[keys.indexOf(isbn)];
+                    var json = JSON.parse(content).items[0];
                     return {
                         count: list.length,
                         title: json.volumeInfo.title,
@@ -136,49 +157,36 @@ module.exports = function(grunt) {
                 }).sortBy('title').reverse()
                 .sortBy('count').reverse()
                 .value();
-           
-            jsdom.env({
-                file: path.resolve(task.data.referencePage),
-                src: [jquery, d3],
-                done: function(err, window) {
-                    var $ = window.$;
-                    var templ = _.template($("#referencePageTmpl").html());
-                    var placeholder = $('div.Product');
-                    createD3Graph(window.d3, 'div.Product', elements);
-                    placeholder.append($('<div>').html(templ({references: elements })));
-                    $('script.jsdom').remove();
 
-                    fs.writeFileSync(window.location.pathname,
-                        window.document.doctype + window.document.innerHTML);
-                    done();
-                }
+                var $ = window.$;
+                var templ = _.template($('#referencePageTmpl').html());
+                var placeholder = $('div.Product');
+                createD3Graph(window.d3, placeholder[0], elements);
+                placeholder.append($('<div>').html(templ({references: elements })));
+
+                $('script.jsdom').remove();
+                fs.writeFile(outputPath,
+                    window.document.doctype + window.document.innerHTML, done);
             });
         });
     });
-
-    var convertToJSDom = function(filepath, callback) {
-        jsdom.env({
-            src: [jquery],
-            file: path.resolve(filepath),
-            done: callback
-        });
-    };
 
     var makeRequests = function(url, cachePath, arr, callback) {
         var func = function(val, callback) {
             val = reference.lookup(reference.text(val));
             var cache = path.join(cachePath, val.replace('/', '-')  + '.json');
-            if (fs.existsSync(cache)) {
-                fs.readFile(cache, function (err, data) {
-                    return callback(null, data);
-                });
-            }
-            else {
-                request(url + val, function(error, response, body) {
-                    fs.writeFileSync(cache, body);
-                    return callback(null, body);
-                });
-            }
+            fs.exists(cache, function(cacheExists) {
+                if (cacheExists) {
+                    fs.readFile(cache, 'utf8', callback);
+                }
+                else {
+                    request(url + val, function(error, response, body) {
+                        fs.writeFile(cache, body, function() {
+                            callback(null, body);
+                        });
+                    });
+                }
+            });
         };
 
         async.map(arr, func, function(err, results) { callback(null, results); });
@@ -187,33 +195,39 @@ module.exports = function(grunt) {
     grunt.registerMultiTask('reference', function() {
         var task = this;
         var done = this.async();
+        var src = _.map(this.filesSrc, function(val) { return path.resolve(val); });
 
-        // Take each of the files and convert them into a DOM object
-        async.map(this.filesSrc, convertToJSDom, function(err, results) {
+        async.each(src, function(filepath, callback) {
+            async.waterfall([
+                fs.readFile.bind(fs, filepath, 'utf8'), 
+                function(str, cb) {
+                    var $ = cheerio.load(str);
+                    var elements = reference.getCitableElements($);
 
-            // Take each of the DOM objects and create citations
-            async.each(results, function(window, callback) {
-                var elements = reference.getCitableElements(window);
-                async.parallel([
-                    function(callback) {
-                        var periodicals = elements.filter(reference.isePeriodical);
-                        var url = 'http://api.altmetric.com/v1/doi/'; 
-                        makeRequests(url, periodCache, periodicals, callback);
-                    },
-                    function(callback) {
-                        var google = elements.filter(reference.iseISBN);
-                        var url = 'https://www.googleapis.com/books/v1/volumes?q=isbn:';
-                        makeRequests(url, googleCache, google, callback);
-                    },
-                    function(callback) {
-                        var urls = elements.filter(reference.iseUrl);
-                        urls = urls.map(function(val) {
-                            return reference.text(val);
-                        });
-                        
-                        callback(null, urls);
-                    }
-                ], function(err, results) {
+                    async.parallel([
+                        function(callback) {
+                            var periodicals = elements.filter(reference.isePeriodical);
+                            var url = 'http://api.altmetric.com/v1/doi/'; 
+                            makeRequests(url, periodCache, periodicals, callback);
+                        },
+                        function(callback) {
+                            var google = elements.filter(reference.iseISBN);
+                            var url = 'https://www.googleapis.com/books/v1/volumes?q=isbn:';
+                            makeRequests(url, googleCache, google, callback);
+                        },
+                        function(callback) {
+                            var urls = elements.filter(reference.iseUrl);
+                            urls = urls.map(function(val) {
+                                return reference.text(val);
+                            });
+                            
+                            callback(null, urls);
+                        }
+                    ], function(err, results) {
+                        cb(err, results, $, elements);
+                    });
+                },
+                function(results, $, elements, cb) {
                     var parseJson = function(val) { return JSON.parse(val); };
                     results[0] = results[0].map(function(val) {
                         return reference.parsePeriodical(parseJson(val));
@@ -229,12 +243,6 @@ module.exports = function(grunt) {
                             elements.filter(reference.iseISBN)).concat(
                             elements.filter(reference.iseUrl)));
 
-                    results.sort(function(a, b) {
-                        // 2 -> DOCUMENT_POSITION_PRECEDING
-                        return a[1][0].compareDocumentPosition(b[1][0]) & 2;
-                    });
-                    
-                    var $ = window.$;
                     var container = $('#references');
                     var elementTemplate = _.template($('#supTmpl').html());
                     var containerTemplate = _.template($('#referenceTmpl').html());
@@ -260,15 +268,17 @@ module.exports = function(grunt) {
                         container.html(containerTemplate({ references: refs }));
                     }
 
-                    $('script.jsdom').remove();
-
-                    fs.writeFileSync(window.location.pathname,
-                        window.document.doctype + window.document.innerHTML);
-                    grunt.log.writeln(window.location.pathname);
-
-                    callback(null);
-                });
-            }, function(err) { done(); });
+                    grunt.log.writeln(filepath);
+                    fs.writeFile(filepath, $.html(), cb);
+                }
+            ], function(err, result) {
+                callback(err);
+            });
+        }, function(err) {
+            if (err) {
+                grunt.fail.fatal(err);
+            }
+            done();            
         });
     });
 };

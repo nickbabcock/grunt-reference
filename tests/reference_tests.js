@@ -1,37 +1,26 @@
 var reference = require('../lib/reference.js');
 var fs = require('fs');
 var path = require('path');
-var jsdom = require('jsdom');
+var cheerio = require('cheerio');
 var _ = require('underscore');
-var jquery = fs.readFileSync(path.resolve('vendor/jquery.min.js'), 'utf8');
-var html = function(html, callback) {
-    jsdom.env({
-        src: [jquery],
-        html: html,
-        done: callback
-    });
-};
 
 exports['test'] = {
     'cite elements': function(test) {
-        html('<cite>1</cite><cite>2</cite>', function(errors, window) {
-            test.equal(reference.getCitableElements(window).length, 2);
-            test.done();
-        })
+        $ = cheerio.load('<cite>1</cite><cite>2</cite>');
+        test.equal(reference.getCitableElements($).length, 2);
+        test.done();
     },
     'cite attributes': function(test) {
-        html('<span cite="1"/><q cite="2"></q>', function(errors, window) {
-            test.equal(reference.getCitableElements(window).length, 2);
-            test.done();
-        });
+        $ = cheerio.load('<span cite="1"/><q cite="2"></q>');
+        test.equal(reference.getCitableElements($).length, 2);
+        test.done();
     },
     'whitespace trim': function(test) {
-        html('<cite> 1    </cite><span cite="  2  "/>', function(errors, window) {
-            var actual = reference.getCitableElements(window);
-            test.equal(reference.text(actual[0]), '1');
-            test.equal(reference.text(actual[1]), '2');
-            test.done();
-        });
+        $ = cheerio.load('<cite> 1    </cite><span cite="  2  "/>');
+        var actual = reference.getCitableElements($);
+        test.equal(reference.text(actual[0]), '1');
+        test.equal(reference.text(actual[1]), '2');
+        test.done();
     },
 
     'url is http': function(test) {
