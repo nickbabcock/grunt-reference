@@ -30,7 +30,7 @@
   "dependencies": {
     "request": "~2.25.0",
     "async": "~0.2.9",
-    "underscore": "~1.5.2",
+    "underscore": "~1.6.0",
     "cheerio": "~0.13.1",
     "jsdom": "~0.10.1"
   },

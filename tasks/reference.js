@@ -119,11 +119,7 @@ module.exports = function(grunt) {
         async.parallel([
             fs.readFile.bind(fs, jqueryPath, 'utf8'),
             fs.readFile.bind(fs, d3Path, 'utf8'),
-            function(cb) {
-                async.map(src, function(val, cb2) {
-                    fs.readFile(val, 'utf8', cb2);
-                }, cb);
-            }
+            async.map.bind(async, src, _.partial(fs.readFile, _, 'utf8', _))
         ], function(err, results) {
             if (err) {
                 grunt.fail.fatal(err);
