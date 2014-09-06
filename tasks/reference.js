@@ -150,6 +150,10 @@ module.exports = function(grunt) {
                     return path.join(googleCache, isbn + '.json'); 
                 }), function(val, cb) { fs.readFile(val, 'utf8', cb); })
             ], function(err, results) {
+                if (err) {
+                    grunt.fail.fatal(err);
+                }
+
                 var window = results[0];
                 var contents = results[1];
                 var keys = _.keys(elements);
@@ -192,6 +196,9 @@ module.exports = function(grunt) {
                 }
                 else {
                     request(url + val, function(error, response, body) {
+                        if (error) {
+                            grunt.fail.fatal(error);
+                        }
                         fs.writeFile(cache, body, function() {
                             callback(null, body);
                         });
@@ -200,7 +207,12 @@ module.exports = function(grunt) {
             });
         };
 
-        async.map(arr, func, function(err, results) { callback(null, results); });
+        async.map(arr, func, function(err, results) {
+            if (err) {
+                grunt.fail.fatal(err);
+            }
+            callback(null, results);
+        });
     };
 
     grunt.registerMultiTask('reference', function() {
@@ -283,6 +295,9 @@ module.exports = function(grunt) {
                     fs.writeFile(filepath, $.html(), cb);
                 }
             ], function(err, result) {
+                if (err) {
+                    grunt.fail.fatal(err);
+                }
                 callback(err);
             });
         }, function(err) {
