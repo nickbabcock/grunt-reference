@@ -8,6 +8,7 @@ module.exports = function(grunt) {
     var _ = require('underscore');
     var reference = require('../lib/reference.js');
     var cheerio = require('cheerio');
+    var mkdirp = require('mkdirp');
     var googleCache = path.resolve('./.grunt/grunt-reference/google');
     var periodCache = path.resolve('./.grunt/grunt-reference/period');
     var jsdom = require('jsdom');
@@ -199,7 +200,12 @@ module.exports = function(grunt) {
                         if (error) {
                             grunt.fail.fatal(error);
                         }
-                        fs.writeFile(cache, body, function() {
+
+                        mkdirp.sync(path.dirname(cache));
+                        fs.writeFile(cache, body, function(err) {
+                            if (err) {
+                                grunt.fail.fatal(err);
+                            }
                             callback(null, body);
                         });
                     });
