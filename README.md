@@ -1,5 +1,7 @@
 # grunt-reference
 
+**This repository hasn't been maintained in years and has been archived. All the functionality I was looking for could be found in [jekyll-scholar](https://github.com/inukshuk/jekyll-scholar)**
+
 Grunt module that scrapes webpages for citations, aggregates them, and can
 [produce an output][].
 
