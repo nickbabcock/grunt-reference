@@ -1,9 +1,13 @@
 # grunt-reference
 
-**This repository hasn't been maintained in years and has been archived. All the functionality I was looking for could be found in [jekyll-scholar](https://github.com/inukshuk/jekyll-scholar)**
+---
+
+**This repository hasn't been maintained in years and has been archived. All the functionality I was seeking is in [jekyll-scholar](https://github.com/inukshuk/jekyll-scholar)**
+
+---
 
 Grunt module that scrapes webpages for citations, aggregates them, and can
-[produce an output][].
+produce an output.
 
 The code here is not intended for public and general use, as it fixes a
 specific task.  I happened to write this code and thought it was pretty neat,
@@ -70,5 +74,4 @@ of files can be given, but the intended use is for a single file.
 - **containerSelector**: jQuery selector that identifies the DOM element that 
   will have the aggregated template appended to it.
 
-[produce an output]: http://www.nbsoftsolutions.com/blog/reference-track-sheet
 [Ibid.]: http://en.wikipedia.org/wiki/Ibid.
